@@ -18,6 +18,20 @@ class FormBuilder
         $this->attrs[$key] = $value;
     }
 
+    private function formatName($value)
+    {
+        if (strpos($value, '.')) {
+            $parts = explode(".", $value);
+            $obj = array_shift($parts);
+            $nested = "";
+            foreach ($parts as $part) {
+                $nested .= "[" . $part . "]";
+            }
+            return $obj . $nested;
+        }
+        return $value;
+    }
+
     private function formatMethod($value)
     {
         return strtolower($value);
@@ -239,7 +253,7 @@ class FormBuilder
         $id = $this->getId();
 
         if (!$disableValidation && $this->errors()->count() > 0) {
-            $class .= $this->errors()->has($name) ? ' is-invalid' : ' is-valid';
+            $class .= $this->errors()->has($this->dotNotationName($name)) ? ' is-invalid' : ' is-valid';
         }
 
         $attributes = [
@@ -261,7 +275,7 @@ class FormBuilder
 
         if ($this->isRadioOrCheckbox()) {
             if ($this->hasOldInput()) {
-                $isChecked = old($name) === $value;
+                $isChecked = old($this->dotNotationName($name)) === $value;
             } else {
                 $isChecked = isset($formData[$name]) ? $formData[$name] === $value : $checked;
             }
@@ -329,11 +343,11 @@ class FormBuilder
             return $input;
         }
 
-        $id             = $this->getId();
-        $label          = $this->renderLabel();
-        $helpText       = $help ? '<small id="help-' . $id . '" class="form-text text-muted">' . $this->getText($help) . '</small>' : '';
-        $error          = $this->getInputErrorMarkup($name);
-        $attrs          = $wrapperAttrs ?? [];
+        $id = $this->getId();
+        $label = $this->renderLabel();
+        $helpText = $help ? '<small id="help-' . $id . '" class="form-text text-muted">' . $this->getText($help) . '</small>' : '';
+        $error = $this->getInputErrorMarkup($this->dotNotationName($name));
+        $attrs = $wrapperAttrs ?? [];
         $attrs['class'] = $this->createAttrsList(
             $attrs['class'] ?? null,
             $formInline ? 'input-group' : 'form-group'
@@ -387,7 +401,7 @@ class FormBuilder
 
     private function hasOldInput()
     {
-        return count((array) old()) != 0;
+        return count((array)old()) != 0;
     }
 
     private function getValue()
@@ -398,10 +412,11 @@ class FormBuilder
         }
 
         if ($this->hasOldInput()) {
-            return old($name, $value);
+            return old($this->dotNotationName($name), $value);
         }
 
-        $fromFill = $formData[$name] ?? null;
+
+        $fromFill = $this->getArrayValueUsingDotNotation($formData, $this->dotNotationName($name), null);
 
         return $value ?? $fromFill;
     }
@@ -461,5 +476,33 @@ class FormBuilder
             $return[$key] = $this->attrs[$key] ?? null;
         }
         return $return;
+    }
+
+    private function dotNotationName($name): string
+    {
+        return str_replace(['.', '[]', '[', ']'], ['_', '', '.', ''], $name);
+    }
+
+    private function getArrayValueUsingDotNotation($arr, $path, $default = "")
+    {
+        if (!is_string($path) || empty($path) || !is_array($arr) || !count($arr)) {
+            return $default;
+        }
+
+        if (strpos($path, '.') !== false) {
+            $keys = explode('.', $path);
+
+            foreach ($keys as $innerKey) {
+                if (!array_key_exists($innerKey, $arr)) {
+                    return $default;
+                }
+
+                $arr = $arr[$innerKey];
+            }
+
+            return $arr;
+        }
+
+        return array_key_exists($path, $arr) ? $arr[$path] : $default;
     }
 }
